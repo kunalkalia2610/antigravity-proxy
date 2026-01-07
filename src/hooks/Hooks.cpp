@@ -79,6 +79,10 @@ static std::mutex g_connectExMtx;
 static std::mutex g_connectExHookMtx;
 static bool g_connectExHookInstalled = false;
 
+// 为了避免日志被大量非目标进程淹没，这里仅首次记录“跳过注入”的进程名
+static std::unordered_map<std::string, bool> g_loggedSkipProcesses;
+static std::mutex g_loggedSkipProcessesMtx;
+
 static std::string WideToUtf8(PCWSTR input) {
     if (!input) return "";
     int len = WideCharToMultiByte(CP_UTF8, 0, input, -1, NULL, 0, NULL, NULL);
@@ -109,6 +113,25 @@ static bool ResolveOriginalTarget(const sockaddr* name, std::string* host, uint1
 static bool IsLoopbackHost(const std::string& host) {
     if (host == "127.0.0.1" || host == "localhost" || host == "::1") return true;
     return host.size() >= 4 && host.substr(0, 4) == "127.";
+}
+
+// 判断是否为 IP 字面量（IPv4/IPv6），避免对纯 IP 走 FakeIP 影响原始语义
+static bool IsIpLiteralHost(const std::string& host) {
+    in_addr addr4{};
+    if (inet_pton(AF_INET, host.c_str(), &addr4) == 1) return true;
+    in6_addr addr6{};
+    if (inet_pton(AF_INET6, host.c_str(), &addr6) == 1) return true;
+    return false;
+}
+
+static std::wstring Utf8ToWide(const std::string& input) {
+    if (input.empty()) return L"";
+    int len = MultiByteToWideChar(CP_UTF8, 0, input.c_str(), -1, NULL, 0);
+    if (len <= 0) return L"";
+    std::wstring result(len, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, input.c_str(), -1, &result[0], len);
+    if (!result.empty() && result.back() == L'\0') result.pop_back();
+    return result;
 }
 
 static bool IsProxySelfTarget(const std::string& host, uint16_t port, const Core::ProxyConfig& proxy) {
@@ -328,37 +351,21 @@ int WSAAPI DetourGetAddrInfo(PCSTR pNodeName, PCSTR pServiceName,
                               const ADDRINFOA* pHints, PADDRINFOA* ppResult) {
     auto& config = Core::Config::Instance();
     
+    if (!fpGetAddrInfo) return EAI_FAIL;
+
     // 如果启用了 FakeIP 且有域名请求
     if (pNodeName && config.fakeIp.enabled) {
-        Core::Logger::Info("拦截到域名解析: " + std::string(pNodeName));
-        
-        // 分配虚拟 IP
-        uint32_t fakeIp = Network::FakeIP::Instance().Alloc(pNodeName);
-        
-        // 手动构造 ADDRINFOA 结构
-        ADDRINFOA* result = (ADDRINFOA*)malloc(sizeof(ADDRINFOA));
-        sockaddr_in* addr = (sockaddr_in*)malloc(sizeof(sockaddr_in));
-        
-        if (result && addr) {
-            memset(result, 0, sizeof(ADDRINFOA));
-            memset(addr, 0, sizeof(sockaddr_in));
-            
-            addr->sin_family = AF_INET;
-            addr->sin_addr.s_addr = fakeIp;
-            addr->sin_port = 0;
-            
-            result->ai_family = AF_INET;
-            result->ai_socktype = SOCK_STREAM;
-            result->ai_protocol = IPPROTO_TCP;
-            result->ai_addrlen = sizeof(sockaddr_in);
-            result->ai_addr = (sockaddr*)addr;
-            result->ai_next = NULL;
-            
-            *ppResult = result;
-            return 0; // 成功
+        std::string node = pNodeName;
+        // 重要：回环/纯 IP 不走 FakeIP，避免与回环 bypass 逻辑冲突，也避免改变原始解析语义
+        if (!node.empty() && !IsLoopbackHost(node) && !IsIpLiteralHost(node)) {
+            Core::Logger::Info("拦截到域名解析: " + node);
+            // 分配虚拟 IP，并让原始 getaddrinfo 生成结果结构（保证 freeaddrinfo 释放契约一致）
+            uint32_t fakeIp = Network::FakeIP::Instance().Alloc(node);
+            std::string fakeIpStr = Network::FakeIP::IpToString(fakeIp);
+            return fpGetAddrInfo(fakeIpStr.c_str(), pServiceName, pHints, ppResult);
         }
     }
-    
+
     // 调用原始函数
     return fpGetAddrInfo(pNodeName, pServiceName, pHints, ppResult);
 }
@@ -367,42 +374,22 @@ int WSAAPI DetourGetAddrInfoW(PCWSTR pNodeName, PCWSTR pServiceName,
                               const ADDRINFOW* pHints, PADDRINFOW* ppResult) {
     auto& config = Core::Config::Instance();
     
+    if (!fpGetAddrInfoW) return EAI_FAIL;
+
     // 如果启用了 FakeIP 且有域名请求
     if (pNodeName && config.fakeIp.enabled) {
         std::string nodeUtf8 = WideToUtf8(pNodeName);
-        if (!nodeUtf8.empty()) {
+        // 重要：回环/纯 IP 不走 FakeIP，避免与回环 bypass 逻辑冲突，也避免改变原始解析语义
+        if (!nodeUtf8.empty() && !IsLoopbackHost(nodeUtf8) && !IsIpLiteralHost(nodeUtf8)) {
             Core::Logger::Info("拦截到域名解析(W): " + nodeUtf8);
-            
-            // 分配虚拟 IP
+            // 分配虚拟 IP，并让原始 GetAddrInfoW 生成结果结构（保证 FreeAddrInfoW/freeaddrinfo 契约一致）
             uint32_t fakeIp = Network::FakeIP::Instance().Alloc(nodeUtf8);
-            
-            // 手动构造 ADDRINFOW 结构
-            ADDRINFOW* result = (ADDRINFOW*)malloc(sizeof(ADDRINFOW));
-            sockaddr_in* addr = (sockaddr_in*)malloc(sizeof(sockaddr_in));
-            
-            if (result && addr) {
-                memset(result, 0, sizeof(ADDRINFOW));
-                memset(addr, 0, sizeof(sockaddr_in));
-                
-                addr->sin_family = AF_INET;
-                addr->sin_addr.s_addr = fakeIp;
-                addr->sin_port = 0;
-                
-                result->ai_family = AF_INET;
-                result->ai_socktype = SOCK_STREAM;
-                result->ai_protocol = IPPROTO_TCP;
-                result->ai_addrlen = sizeof(sockaddr_in);
-                result->ai_addr = (sockaddr*)addr;
-                result->ai_next = NULL;
-                result->ai_canonname = NULL;
-                
-                *ppResult = result;
-                return 0; // 成功
-            }
+            std::string fakeIpStr = Network::FakeIP::IpToString(fakeIp);
+            std::wstring fakeIpW = Utf8ToWide(fakeIpStr);
+            return fpGetAddrInfoW(fakeIpW.c_str(), pServiceName, pHints, ppResult);
         }
     }
-    
-    if (!fpGetAddrInfoW) return EAI_FAIL;
+
     return fpGetAddrInfoW(pNodeName, pServiceName, pHints, ppResult);
 }
 
@@ -718,7 +705,18 @@ BOOL WINAPI DetourCreateProcessW(
         
         // 检查是否在目标进程列表中
         if (!config.ShouldInject(appName)) {
-            Core::Logger::Info("[跳过] 非目标进程: " + appName + " (PID: " + std::to_string(lpProcessInformation->dwProcessId) + ")");
+            bool shouldLog = false;
+            {
+                std::lock_guard<std::mutex> lock(g_loggedSkipProcessesMtx);
+                if (g_loggedSkipProcesses.find(appName) == g_loggedSkipProcesses.end()) {
+                    g_loggedSkipProcesses[appName] = true;
+                    shouldLog = true;
+                }
+            }
+            if (shouldLog) {
+                Core::Logger::Info("[跳过] 非目标进程(仅首次记录): " + appName +
+                                  " (PID: " + std::to_string(lpProcessInformation->dwProcessId) + ")");
+            }
             // 恢复进程（不注入）
             if (!(dwCreationFlags & CREATE_SUSPENDED)) {
                 ResumeThread(lpProcessInformation->hThread);

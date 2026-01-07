@@ -80,7 +80,7 @@ namespace VersionProxy {
         fp_VerQueryValueA = (VerQueryValueA_t)GetProcAddress(g_hRealVersionDll, "VerQueryValueA");
         fp_VerQueryValueW = (VerQueryValueW_t)GetProcAddress(g_hRealVersionDll, "VerQueryValueW");
         
-        Core::Logger::Info("Real version.dll loaded and functions resolved");
+        Core::Logger::Info("已加载真实 version.dll 并解析导出函数");
         return true;
     }
     

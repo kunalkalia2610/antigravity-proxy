@@ -66,7 +66,7 @@ namespace Core {
             try {
                 std::ifstream f(path);
                 if (!f.is_open()) {
-                    Logger::Error("Failed to open config.json");
+                    Logger::Error("打开配置文件失败: " + path);
                     return false;
                 }
                 nlohmann::json j = nlohmann::json::parse(f);
@@ -111,10 +111,10 @@ namespace Core {
                              ", fake_ip=" + std::string(fakeIp.enabled ? "true" : "false") +
                              ", child_injection=" + std::string(childInjection ? "true" : "false") +
                              ", traffic_logging=" + std::string(trafficLogging ? "true" : "false"));
-                Logger::Info("Config loaded successfully.");
+                Logger::Info("配置加载成功。");
                 return true;
             } catch (const std::exception& e) {
-                Logger::Error(std::string("Config parse error: ") + e.what());
+                Logger::Error(std::string("配置解析失败: ") + e.what());
                 return false;
             }
         }
