@@ -4,6 +4,7 @@
 #include <mutex>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include "../core/Config.hpp"
 #include "../core/Logger.hpp"
 
 namespace Network {
@@ -38,6 +39,17 @@ namespace Network {
             auto it = m_domainToIp.find(domain);
             if (it != m_domainToIp.end()) {
                 return htonl(it->second);
+            }
+            
+            // 限制缓存规模，避免无限增长
+            int maxEntries = Core::Config::Instance().fakeIp.max_entries;
+            if (maxEntries > 0 && m_domainToIp.size() >= static_cast<size_t>(maxEntries)) {
+                static bool s_limitLogged = false;
+                if (!s_limitLogged) {
+                    Core::Logger::Warn("FakeIP: 映射已达上限，后续域名将回退原始解析");
+                    s_limitLogged = true;
+                }
+                return 0;
             }
             
             // 分配新 IP

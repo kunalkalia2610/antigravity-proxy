@@ -5,7 +5,7 @@
 <h1 align="center">Antigravity-Proxy</h1>
 
 <p align="center">
-  <b>🚀 Force proxy any Windows application without TUN mode</b>
+  <b>🚀 Built for the Antigravity editor: use proxy without TUN mode (especially useful in China)</b>
 </p>
 
 <p align="center">
@@ -25,6 +25,7 @@
 ## 📖 Table of Contents
 
 - [📖 Introduction](#-introduction)
+- [⚡ Antigravity Quick Start](#-antigravity-quick-start)
 - [✨ Features](#-features)
 - [🔧 How It Works](#-how-it-works)
 - [🛠️ Build](#️-build)
@@ -37,20 +38,24 @@
 
 ## 📖 Introduction
 
-**Antigravity-Proxy** is a process-level forced proxy tool for Windows.
+**Antigravity-Proxy** is a Windows proxy injection module built specifically for the **Antigravity editor**.
+
+The goal is simple: help users (especially in China) use Antigravity **without enabling Clash TUN mode**, while still sending Antigravity’s traffic through your SOCKS5/HTTP proxy.
+
+> Name note: **Antigravity-Proxy** = Antigravity + Proxy — it pulls only Antigravity-related processes into the proxy (not a global system takeover).
 
 ### 🎯 Problem Solved
 
 Have you ever encountered these situations?
 
-- 🔴 Some applications **don't respect system proxy**, requiring Clash TUN mode
+- 🔴 Antigravity **doesn't respect system proxy** in some environments, forcing you to enable Clash TUN mode
 - 🔴 TUN mode proxies **all traffic globally**, affecting local development
 - 🔴 TUN mode requires **administrator privileges**, which some environments don't allow
 
 **Antigravity-Proxy comes to the rescue!** It can:
 
-- ✅ **Proxy only specified applications**, without affecting other traffic
-- ✅ **No TUN mode required**, no administrator privileges needed
+- ✅ **Proxy only specified applications** (primarily Antigravity-related), without affecting other traffic
+- ✅ **No TUN mode required**, avoiding a global proxy takeover
 - ✅ **Transparent proxy**, target applications are completely unaware
 
 ### 🌟 Core Value
@@ -63,6 +68,54 @@ Have you ever encountered these situations?
 | Complex configuration | Just drop in the DLL |
 
 ---
+
+## ⚡ Antigravity Quick Start
+
+> If you only care about getting Antigravity working right now, this is the shortest path.
+
+### Step 1: Prepare a Proxy
+
+Start your proxy client (e.g. Clash/Mihomo) and make sure you have a local SOCKS5 or HTTP proxy endpoint (e.g. `127.0.0.1:7890`).
+
+### Step 2: Get the Files
+
+You need two files:
+- `version.dll`
+- `config.json`
+
+(Download from Releases, or build them yourself.)
+
+### Step 3: Deploy to Antigravity
+
+Copy `version.dll` and `config.json` to Antigravity’s main program directory (next to `Antigravity.exe`). Then launch Antigravity — done.
+
+#### Common Windows Path + Quick Jump
+
+In most cases, Antigravity is installed at:
+
+`C:\Users\<username>\AppData\Local\Programs\Antigravity\`
+
+Example: `C:\Users\yuaotian\AppData\Local\Programs\Antigravity`
+
+If you can’t find the folder: locate the Antigravity shortcut (Desktop/Start Menu), **right-click → Open file location** — that folder is Antigravity’s main directory.
+
+Quick jump from terminal:
+
+```powershell
+cd "$env:LOCALAPPDATA\Programs\Antigravity"
+```
+
+```bat
+cd /d "%LOCALAPPDATA%\Programs\Antigravity"
+```
+
+(Optional) Set a custom env var so you can jump there anytime:
+
+```bat
+setx ANTIGRAVITY_HOME "%LOCALAPPDATA%\Programs\Antigravity"
+```
+
+After that: PowerShell `cd $env:ANTIGRAVITY_HOME`, CMD `cd /d %ANTIGRAVITY_HOME%`.
 
 ## ✨ Features
 
@@ -344,6 +397,8 @@ Launch the target application, done! 🎉
 ---
 
 ## 🚀 Advanced Usage
+
+> Extra value: while this project is primarily built for Antigravity, the underlying technique is generic and can be adapted to other Windows applications that ignore system proxy.
 
 ### 🎯 Force Proxy Other Programs
 

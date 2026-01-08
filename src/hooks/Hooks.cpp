@@ -72,16 +72,19 @@ struct ConnectExContext {
     const char* sendBuf;
     DWORD sendLen;
     LPDWORD bytesSent;
+    ULONGLONG createdTick; // 记录创建时间，便于清理超时上下文
 };
 
 static std::unordered_map<LPOVERLAPPED, ConnectExContext> g_connectExPending;
 static std::mutex g_connectExMtx;
 static std::mutex g_connectExHookMtx;
 static bool g_connectExHookInstalled = false;
+static const ULONGLONG kConnectExPendingTtlMs = 60000; // 超过 60 秒的上下文视为过期
 
 // 为了避免日志被大量非目标进程淹没，这里仅首次记录“跳过注入”的进程名
 static std::unordered_map<std::string, bool> g_loggedSkipProcesses;
 static std::mutex g_loggedSkipProcessesMtx;
+static const size_t kMaxLoggedSkipProcesses = 256; // 限制缓存规模，避免无限增长
 
 static std::string WideToUtf8(PCWSTR input) {
     if (!input) return "";
@@ -209,9 +212,24 @@ static bool DoProxyHandshake(SOCKET s, const std::string& host, uint16_t port) {
     return true;
 }
 
+static void PurgeStaleConnectExContexts(ULONGLONG now) {
+    // 清理长时间未完成的 ConnectEx 上下文，避免内存堆积
+    for (auto it = g_connectExPending.begin(); it != g_connectExPending.end(); ) {
+        if (now - it->second.createdTick > kConnectExPendingTtlMs) {
+            it = g_connectExPending.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 static void SaveConnectExContext(LPOVERLAPPED ovl, const ConnectExContext& ctx) {
     std::lock_guard<std::mutex> lock(g_connectExMtx);
-    g_connectExPending[ovl] = ctx;
+    ULONGLONG now = GetTickCount64();
+    PurgeStaleConnectExContexts(now);
+    ConnectExContext copy = ctx;
+    copy.createdTick = now;
+    g_connectExPending[ovl] = copy;
 }
 
 static bool PopConnectExContext(LPOVERLAPPED ovl, ConnectExContext* out) {
@@ -266,6 +284,20 @@ int PerformProxyConnect(SOCKET s, const struct sockaddr* name, int namelen, bool
     // 超时控制
     Network::SocketWrapper sock(s);
     sock.SetTimeouts(config.timeout.recv_ms, config.timeout.send_ms);
+    
+    // 基础参数校验，避免空指针/长度不足导致崩溃
+    if (!name) {
+        WSASetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+    if (namelen < (int)sizeof(sockaddr)) {
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+    if (name->sa_family == AF_INET && namelen < (int)sizeof(sockaddr_in)) {
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
     
     if (name->sa_family != AF_INET) {
         Core::Logger::Info("非 IPv4 连接已直连, family=" + std::to_string((int)name->sa_family));
@@ -361,8 +393,11 @@ int WSAAPI DetourGetAddrInfo(PCSTR pNodeName, PCSTR pServiceName,
             Core::Logger::Info("拦截到域名解析: " + node);
             // 分配虚拟 IP，并让原始 getaddrinfo 生成结果结构（保证 freeaddrinfo 释放契约一致）
             uint32_t fakeIp = Network::FakeIP::Instance().Alloc(node);
-            std::string fakeIpStr = Network::FakeIP::IpToString(fakeIp);
-            return fpGetAddrInfo(fakeIpStr.c_str(), pServiceName, pHints, ppResult);
+            if (fakeIp != 0) {
+                std::string fakeIpStr = Network::FakeIP::IpToString(fakeIp);
+                return fpGetAddrInfo(fakeIpStr.c_str(), pServiceName, pHints, ppResult);
+            }
+            // FakeIP 达到上限时回退原始解析
         }
     }
 
@@ -384,9 +419,12 @@ int WSAAPI DetourGetAddrInfoW(PCWSTR pNodeName, PCWSTR pServiceName,
             Core::Logger::Info("拦截到域名解析(W): " + nodeUtf8);
             // 分配虚拟 IP，并让原始 GetAddrInfoW 生成结果结构（保证 FreeAddrInfoW/freeaddrinfo 契约一致）
             uint32_t fakeIp = Network::FakeIP::Instance().Alloc(nodeUtf8);
-            std::string fakeIpStr = Network::FakeIP::IpToString(fakeIp);
-            std::wstring fakeIpW = Utf8ToWide(fakeIpStr);
-            return fpGetAddrInfoW(fakeIpW.c_str(), pServiceName, pHints, ppResult);
+            if (fakeIp != 0) {
+                std::string fakeIpStr = Network::FakeIP::IpToString(fakeIp);
+                std::wstring fakeIpW = Utf8ToWide(fakeIpStr);
+                return fpGetAddrInfoW(fakeIpW.c_str(), pServiceName, pHints, ppResult);
+            }
+            // FakeIP 达到上限时回退原始解析
         }
     }
 
@@ -519,6 +557,19 @@ BOOL PASCAL DetourConnectEx(
     LPOVERLAPPED lpOverlapped
 ) {
     if (!fpConnectEx) {
+        WSASetLastError(WSAEINVAL);
+        return FALSE;
+    }
+    // 基础参数校验，避免空指针/长度不足导致崩溃
+    if (!name) {
+        WSASetLastError(WSAEFAULT);
+        return FALSE;
+    }
+    if (namelen < (int)sizeof(sockaddr)) {
+        WSASetLastError(WSAEINVAL);
+        return FALSE;
+    }
+    if (name->sa_family == AF_INET && namelen < (int)sizeof(sockaddr_in)) {
         WSASetLastError(WSAEINVAL);
         return FALSE;
     }
@@ -708,6 +759,10 @@ BOOL WINAPI DetourCreateProcessW(
             bool shouldLog = false;
             {
                 std::lock_guard<std::mutex> lock(g_loggedSkipProcessesMtx);
+                if (g_loggedSkipProcesses.size() >= kMaxLoggedSkipProcesses) {
+                    // 达到上限时清空，避免无限增长
+                    g_loggedSkipProcesses.clear();
+                }
                 if (g_loggedSkipProcesses.find(appName) == g_loggedSkipProcesses.end()) {
                     g_loggedSkipProcesses[appName] = true;
                     shouldLog = true;
@@ -890,6 +945,11 @@ namespace Hooks {
     }
     
     void Uninstall() {
+        {
+            // 清理未完成的 ConnectEx 上下文，避免卸载后残留
+            std::lock_guard<std::mutex> lock(g_connectExMtx);
+            g_connectExPending.clear();
+        }
         MH_DisableHook(MH_ALL_HOOKS);
         MH_Uninitialize();
     }

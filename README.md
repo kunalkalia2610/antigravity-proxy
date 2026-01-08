@@ -5,7 +5,7 @@
 <h1 align="center">Antigravity-Proxy</h1>
 
 <p align="center">
-  <b>🚀 无需 TUN 模式，强制代理任意 Windows 程序的网络流量</b>
+  <b>🚀 专为 Antigravity 编辑器打造：在中国也能无需 TUN 模式稳定走代理</b>
 </p>
 
 <p align="center">
@@ -25,6 +25,7 @@
 ## 📖 目录 / Table of Contents
 
 - [📖 项目介绍 / Introduction](#-项目介绍--introduction)
+- [⚡ Antigravity 快速开始 / Quick Start](#-antigravity-快速开始--quick-start)
 - [✨ 功能特性 / Features](#-功能特性--features)
 - [🔧 工作原理 / How It Works](#-工作原理--how-it-works)
 - [🛠️ 编译构建 / Build](#️-编译构建--build)
@@ -37,20 +38,24 @@
 
 ## 📖 项目介绍 / Introduction
 
-**Antigravity-Proxy** 是一款 Windows 平台的进程级强制代理工具。
+**Antigravity-Proxy** 是专门为 **Antigravity 编辑器**量身定制的 Windows 代理注入组件（DLL）。
+
+它的目标很简单：让中国用户使用 Antigravity 时，**不用开 Clash TUN 模式**，也能把网络流量稳定交给你的 SOCKS5/HTTP 代理。
+
+> 项目名 **Antigravity-Proxy** = Antigravity + Proxy：只把 Antigravity 相关进程的流量“拽”进代理里（别担心，不会全局接管）。
 
 ### 🎯 解决的痛点 / Problem Solved
 
 你是否遇到过这些情况？
 
-- 🔴 某些程序**不走系统代理**，必须开启 Clash TUN 模式
+- 🔴 使用 Antigravity 时**不走系统代理**，只能被迫开启 Clash TUN 模式
 - 🔴 开启 TUN 模式后**全局流量都被代理**，影响本地开发
 - 🔴 TUN 模式需要**管理员权限**，某些环境不允许
 
-**Antigravity-Proxy 来拯救你！** 它可以：
+**Antigravity-Proxy 就是来专治这个的。** 它可以：
 
-- ✅ **仅代理指定程序**，不影响其他流量
-- ✅ **无需 TUN 模式**，无需管理员权限
+- ✅ **仅代理指定程序**（默认面向 Antigravity 相关进程），不影响其他流量
+- ✅ **无需 TUN 模式**，避免全局接管
 - ✅ **透明代理**，目标程序完全无感知
 
 ### 🌟 核心价值 / Core Value
@@ -64,11 +69,51 @@
 
 ---
 
-**Antigravity-Proxy** is a process-level forced proxy tool for Windows.
+## ⚡ Antigravity 快速开始 / Quick Start
 
-It allows you to force any Windows application to use a SOCKS5/HTTP proxy **without enabling TUN mode**. Just drop the DLL into the target program's folder, and all its network traffic will be redirected through your proxy.
+> 只想让 Antigravity 立刻能用？看这一节就够了。
 
----
+### Step 1: 准备代理 / Prepare a Proxy
+
+启动你的代理软件（例如 Clash/Mihomo），确保本机有可用的 SOCKS5 或 HTTP 代理端口（如 `127.0.0.1:7890`）。
+
+### Step 2: 准备文件 / Get the Files
+
+准备两份文件：
+- `version.dll`
+- `config.json`
+
+（可以从 Release 下载，或自行编译生成。）
+
+### Step 3: 部署到 Antigravity / Deploy to Antigravity
+
+把 `version.dll` 和 `config.json` 复制到 **Antigravity 主程序目录**（与 `Antigravity.exe` 同级）。然后启动 Antigravity，搞定。
+
+#### Windows 常见目录 + 快速跳转
+
+一般情况下 Antigravity 会装在：
+
+例如：`C:\Users\<用户名>\AppData\Local\Programs\Antigravity`
+
+如果你找不到这个目录：在桌面/开始菜单找到 Antigravity 图标，**右键 → 打开文件所在的位置**，跳出来的那个目录就是它的主程序目录。
+
+想从命令行一键跳过去（少点鼠标，多点快乐）：
+
+```powershell
+cd "$env:LOCALAPPDATA\Programs\Antigravity"
+```
+
+```bat
+cd /d "%LOCALAPPDATA%\Programs\Antigravity"
+```
+
+（可选）你也可以自己设个环境变量，之后就能 `cd` 秒过去：
+
+```bat
+setx ANTIGRAVITY_HOME "%LOCALAPPDATA%\Programs\Antigravity"
+```
+
+设置完后：PowerShell 用 `cd $env:ANTIGRAVITY_HOME`，CMD 用 `cd /d %ANTIGRAVITY_HOME%`。
 
 ## ✨ 功能特性 / Features
 
@@ -351,6 +396,8 @@ target_link_libraries(version PRIVATE ws2_32)
 ---
 
 ## 🚀 进阶玩法 / Advanced Usage
+
+> 附加价值：本项目首先为 Antigravity 服务，但底层是通用的进程级强制代理方案，也可以用来强制代理其他不走系统代理的 Windows 程序，或基于此二次开发。
 
 ### 🎯 强制代理其他程序 / Force Proxy Other Programs
 

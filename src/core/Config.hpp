@@ -17,6 +17,7 @@ namespace Core {
     struct FakeIPConfig {
         bool enabled = true;
         std::string cidr = "10.0.0.0/8";
+        int max_entries = 0; // 最大缓存条目数，0 表示不限制
     };
 
     struct TimeoutConfig {
@@ -82,6 +83,8 @@ namespace Core {
                     auto& fip = j["fake_ip"];
                     fakeIp.enabled = fip.value("enabled", true);
                     fakeIp.cidr = fip.value("cidr", "10.0.0.0/8");
+                    int maxEntries = fip.value("max_entries", 0);
+                    fakeIp.max_entries = maxEntries < 0 ? 0 : maxEntries;
                 }
 
                 if (j.contains("timeout")) {
