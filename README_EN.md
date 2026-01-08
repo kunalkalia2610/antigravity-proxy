@@ -77,6 +77,61 @@ Have you ever encountered these situations?
 
 Start your proxy client (e.g. Clash/Mihomo) and make sure you have a local SOCKS5 or HTTP proxy endpoint (e.g. `127.0.0.1:7890`).
 
+<details>
+<summary><b>📋 Common Proxy Software Port Reference (Click to expand)</b></summary>
+
+#### Default Ports for Popular Proxy Clients
+
+| Proxy Software | SOCKS5 Port | HTTP Port | Mixed Port | Notes |
+|----------------|-------------|-----------|------------|-------|
+| **Clash / Clash Verge** | 7891 | 7890 | 7890 | Mixed port supports both SOCKS5 and HTTP |
+| **Clash for Windows** | 7891 | 7890 | 7890 | Settings → Ports to view/modify |
+| **Mihomo (Clash Meta)** | 7891 | 7890 | 7890 | Same as Clash config format |
+| **V2RayN** | 10808 | 10809 | - | Settings → Basic Settings → Core |
+| **V2RayA** | 20170 | 20171 | - | Configurable in admin panel |
+| **Shadowsocks** | 1080 | - | - | SOCKS5 only, no HTTP |
+| **ShadowsocksR** | 1080 | - | - | SOCKS5 only, no HTTP |
+| **Surge (Mac/iOS)** | 6153 | 6152 | - | Ports may differ in enhanced mode |
+| **Qv2ray** | 1089 | 8889 | - | Preferences → Inbound Settings |
+| **sing-box** | Custom | Custom | Custom | Must be manually specified in config |
+| **NekoBox** | 2080 | 2081 | - | Settings → Inbound |
+| **Clash Meta for Android** | 7891 | 7890 | 7890 | Same as Clash rules |
+
+> 💡 **SOCKS5 is recommended**: This tool has better support for SOCKS5, so use it when possible.
+
+#### How to Verify Your Proxy Port is Open?
+
+**Method 1: Check Proxy Software UI**
+- Most proxy clients display the listening port on the main interface or in settings
+
+**Method 2: PowerShell Test**
+```powershell
+# Test SOCKS5 port (default 7891)
+Test-NetConnection -ComputerName 127.0.0.1 -Port 7891
+
+# Test HTTP port (default 7890)
+Test-NetConnection -ComputerName 127.0.0.1 -Port 7890
+```
+
+**Method 3: curl Test (requires curl)**
+```bash
+# Test via SOCKS5 proxy
+curl -x socks5://127.0.0.1:7891 https://www.google.com -I
+
+# Test via HTTP proxy
+curl -x http://127.0.0.1:7890 https://www.google.com -I
+```
+
+#### Common Port Issues and Solutions
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| Port in use | Another program is using the port | `netstat -ano | findstr :7890` to find the process |
+| Connection refused | Proxy not running or wrong port | Confirm proxy is running, check port config |
+| No response | Firewall blocking | Check Windows Firewall settings |
+
+</details>
+
 ### Step 2: Get the Files
 
 You need two files:

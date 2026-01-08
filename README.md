@@ -77,6 +77,61 @@
 
 启动你的代理软件（例如 Clash/Mihomo），确保本机有可用的 SOCKS5 或 HTTP 代理端口（如 `127.0.0.1:7890`）。
 
+<details>
+<summary><b>📋 常用代理软件端口速查表（点击展开）</b></summary>
+
+#### 各代理软件默认端口
+
+| 代理软件 | SOCKS5 端口 | HTTP 端口 | 混合端口 | 备注 |
+|----------|-------------|-----------|----------|------|
+| **Clash / Clash Verge** | 7891 | 7890 | 7890 | 混合端口同时支持 SOCKS5 和 HTTP |
+| **Clash for Windows** | 7891 | 7890 | 7890 | 设置 → Ports 可查看/修改 |
+| **Mihomo (Clash Meta)** | 7891 | 7890 | 7890 | 同 Clash 配置格式 |
+| **V2RayN** | 10808 | 10809 | - | 设置 → 参数设置 → Core 基础设置 |
+| **V2RayA** | 20170 | 20171 | - | 后台管理页面可修改 |
+| **Shadowsocks** | 1080 | - | - | 仅 SOCKS5，无 HTTP |
+| **ShadowsocksR** | 1080 | - | - | 仅 SOCKS5，无 HTTP |
+| **Surge (Mac/iOS)** | 6153 | 6152 | - | 增强模式下端口可能不同 |
+| **Qv2ray** | 1089 | 8889 | - | 首选项 → 入站设置 |
+| **sing-box** | 自定义 | 自定义 | 自定义 | 需在配置文件中手动指定 |
+| **NekoBox** | 2080 | 2081 | - | 设置 → 入站 |
+| **Clash Meta for Android** | 7891 | 7890 | 7890 | 同 Clash 规则 |
+
+> 💡 **推荐使用 SOCKS5 协议**：本工具对 SOCKS5 的支持更完善，建议优先使用。
+
+#### 如何确认代理端口是否开启？
+
+**方法 1：查看代理软件界面**
+- 大多数代理软件会在主界面或设置中显示当前监听端口
+
+**方法 2：命令行测试**
+```powershell
+# 测试 SOCKS5 端口 (默认 7891)
+Test-NetConnection -ComputerName 127.0.0.1 -Port 7891
+
+# 测试 HTTP 端口 (默认 7890)
+Test-NetConnection -ComputerName 127.0.0.1 -Port 7890
+```
+
+**方法 3：curl 测试（需安装 curl）**
+```bash
+# 通过 SOCKS5 代理访问
+curl -x socks5://127.0.0.1:7891 https://www.google.com -I
+
+# 通过 HTTP 代理访问
+curl -x http://127.0.0.1:7890 https://www.google.com -I
+```
+
+#### 常见端口问题及解决
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| 端口被占用 | 其他程序使用了该端口 | `netstat -ano | findstr :7890` 查找占用进程 |
+| 连接被拒绝 | 代理软件未启动或端口错误 | 确认代理软件已启动，检查端口配置 |
+| 代理无响应 | 防火墙阻止 | 检查 Windows 防火墙设置 |
+
+</details>
+
 ### Step 2: 准备文件 / Get the Files
 
 准备两份文件：

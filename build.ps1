@@ -307,6 +307,25 @@ Antigravity-Proxy 是一个基于 MinHook 的 Windows DLL 代理注入工具。
 }
 ``````
 
+#### 常用代理软件端口参考
+
+| 代理软件 | SOCKS5 端口 | HTTP 端口 | 混合端口 | 说明 |
+|----------|-------------|-----------|----------|------|
+| Clash / Clash Verge | 7891 | 7890 | 7890 | 混合端口同时支持 SOCKS5 和 HTTP |
+| Clash for Windows | 7891 | 7890 | 7890 | 设置 → Ports 查看 |
+| Mihomo (Clash Meta) | 7891 | 7890 | 7890 | 配置同 Clash |
+| V2RayN | 10808 | 10809 | - | 设置 → Core 基础设置 |
+| Shadowsocks | 1080 | - | - | 仅 SOCKS5 |
+| Surge | 6153 | 6152 | - | Mac/iOS |
+| Qv2ray | 1089 | 8889 | - | 首选项 → 入站设置 |
+
+> **提示**: 推荐使用 SOCKS5 协议，本工具对其支持更完善。
+
+#### 如何确认端口是否开启？
+```powershell
+# PowerShell 测试端口
+Test-NetConnection -ComputerName 127.0.0.1 -Port 7890
+```
 
 ### 3. 启动目标程序
 直接启动目标程序，DLL 会自动加载并重定向网络流量。
